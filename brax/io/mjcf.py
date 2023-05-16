@@ -75,15 +75,25 @@ def _fuse_bodies(elem: ElementTree.Element):
     for grandchild in child:
       # TODO: might need to offset more than just body, geom
       if grandchild.tag in ('body', 'geom') and (cpos != 0).any():
-        gcpos = grandchild.attrib.get('pos', '0 0 0')
-        gcquat = grandchild.attrib.get('quat', '1 0 0 0')
-        gcpos = np.fromstring(gcpos, sep=' ')
-        gcquat = np.fromstring(gcquat, sep=' ')
-        gcpos, gcquat = _transform_do(cpos, cquat, gcpos, gcquat)
-        gcpos = ' '.join('%f' % i for i in gcpos)
-        gcquat = ' '.join('%f' % i for i in gcquat)
-        grandchild.attrib['pos'] = gcpos
-        grandchild.attrib['quat'] = gcquat
+        gcfromto = grandchild.attrib.get('fromto', None)
+        if gcfromto:
+            from_pos = np.fromstring(' '.join(gcfromto.split(' ')[0:3]), sep=' ')
+            to_pos = np.fromstring(' '.join(gcfromto.split(' ')[3:6]), sep=' ')
+            from_pos, _ = _transform_do(cpos, cquat, from_pos, np.array([1, 0, 0, 0]))
+            to_pos, _ = _transform_do(cpos, cquat, to_pos, np.array([1, 0, 0, 0]))
+            gcfromto = ' '.join('%f' % i for i in np.concatenate([from_pos, to_pos]))
+            grandchild.attrib['fromto'] = gcfromto
+        else:
+            gcpos = grandchild.attrib.get('pos', '0 0 0')
+            gcquat = grandchild.attrib.get('quat', '1 0 0 0')
+            gcpos = np.fromstring(gcpos, sep=' ')
+            gcquat = np.fromstring(gcquat, sep=' ')
+            gcpos, gcquat = _transform_do(cpos, cquat, gcpos, gcquat)
+            gcpos = ' '.join('%f' % i for i in gcpos)
+            gcquat = ' '.join('%f' % i for i in gcquat)
+            grandchild.attrib['pos'] = gcpos
+            grandchild.attrib['quat'] = gcquat
+            
       elem.append(grandchild)
     elem.remove(child)
 
@@ -216,9 +226,10 @@ def _get_custom(mj: mujoco.MjModel) -> Dict[str, np.ndarray]:
           f'All tuple elements "{name}" should have the same object type.'
       )
     if objtype[0] not in [1, 5]:
-      raise NotImplementedError(
-          f'Custom tuple "{name}" with objtype=={objtype[0]} is not supported.'
-      )
+        continue
+    #   raise NotImplementedError(
+    #       f'Custom tuple "{name}" with objtype=={objtype[0]} is not supported.'
+    #   )
     typ = {1: 'body', 5: 'geom'}[objtype[0]]
     if name in default and default[name][1] != typ:
       raise ValueError(
